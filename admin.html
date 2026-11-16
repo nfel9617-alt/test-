@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--blue:#1456e8;--soft:#f2f6ff;--line:#dbe4f7;--mut:#4a5568}*{box-sizing:border-box;margin:0}
+body{font-family:'Plus Jakarta Sans',sans-serif;color:#000;background:var(--soft)}
+.btn{background:var(--blue);color:#fff;border:0;border-radius:10px;padding:9px 16px;font:700 .85rem 'Plus Jakarta Sans',sans-serif;cursor:pointer}.btn.o{background:#fff;color:var(--blue);border:1.5px solid var(--blue)}.btn.d{background:#fff;color:#c00;border:1.5px solid #c00}
+input,select,textarea{font:inherit;border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;width:100%}
+#login{max-width:340px;margin:18vh auto;background:#fff;padding:30px;border-radius:20px;display:grid;gap:12px}
+#app{display:none;grid-template-columns:230px 1fr;min-height:100vh}
+aside{background:#fff;border-right:1px solid var(--line);padding:22px 14px;display:flex;flex-direction:column;gap:4px}
+aside h1{font-size:1.1rem;padding:0 10px 14px}aside button{text-align:left;background:none;border:0;padding:11px 12px;border-radius:10px;font:500 .95rem 'Plus Jakarta Sans',sans-serif;cursor:pointer}
+aside button.on{background:var(--blue);color:#fff;font-weight:700}
+main{padding:28px;overflow:auto}h2{margin-bottom:18px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}.stat{background:#fff;border-radius:16px;padding:20px}.stat b{font-size:2rem;color:var(--blue);display:block}
+.box{background:#fff;border-radius:16px;padding:18px;margin-bottom:16px;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:.88rem}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mut)}
+.add{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end}
+.tag{padding:2px 10px;border-radius:99px;background:var(--soft);color:var(--blue);font-weight:700;font-size:.78rem}
+@media(max-width:760px){#app{grid-template-columns:1fr}aside{flex-direction:row;overflow:auto;padding:10px}aside h1{display:none}aside button{white-space:nowrap}}
+</style></head><body>
+<form id="login" onsubmit="login(event)"><h2>Admin login</h2><input type="password" id="pw" placeholder="Password" required><button class="btn">Sign in</button><small id="err" style="color:#c00"></small></form>
+<div id="app"><aside id="nav"><h1>Clinic admin</h1></aside><main><h2 id="title"></h2><div id="view"></div></main></div>
+<script>
+const API_URL=""; // same Apps Script URL as index.html
+const TABS={dashboard:"Dashboard",appointments:"Appointments",patients:"Patients",services:"Dental services",results:"Results",testimonials:"Testimonials",about:"About information"};
+const $=id=>document.getElementById(id),esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let pass="";
+async function api(o){const r=await fetch(API_URL,{method:"POST",body:JSON.stringify({pass,...o})});return r.json()}
+async function login(e){e.preventDefault();pass=$("pw").value;if(!API_URL){$("err").textContent="Set API_URL first.";return}
+try{const r=await api({action:"login"});if(r.error)throw 0;$("login").style.display="none";$("app").style.display="grid";show("dashboard")}catch{$("err").textContent="Wrong password or API error."}}
+$("nav").innerHTML+=Object.entries(TABS).map(([k,v])=>`<button data-k="${k}" onclick="show('${k}')">${v}</button>`).join("");
+async function show(k){document.querySelectorAll("aside button").forEach(b=>b.classList.toggle("on",b.dataset.k===k));$("title").textContent=TABS[k];$("view").innerHTML="Loading…";await V[k]()}
+const list=s=>api({action:"list",sheet:s});
+const table=(cols,rows,act)=>`<div class="box"><table><tr>${cols.map(c=>`<th>${c}</th>`).join("")}<th></th></tr>${rows.map(r=>`<tr>${cols.map(c=>`<td>${c==="photo"||c==="before"||c==="after"?(r[c]?"✔":""):esc(r[c])}</td>`).join("")}<td>${act(r)}</td></tr>`).join("")||"<tr><td>Nothing here yet.</td></tr>"}</table></div>`;
+const del=(s,r)=>`<button class="btn d" onclick="rm('${s}',${r._row})">Delete</button>`;
+async function rm(s,row){if(confirm("Delete this item?")){await api({action:"remove",sheet:s,_row:row});show(cur(s))}}
+const cur=s=>({Services:"services",Results:"results",Testimonials:"testimonials",Appointments:"appointments"}[s]);
+async function addRow(s,cols){const row={};cols.forEach(c=>row[c]=$("f_"+c).value);await api({action:"add",sheet:s,row});show(cur(s))}
+const form=(s,cols)=>`<div class="box add">${cols.map(c=>`<label>${c}<input id="f_${c}"></label>`).join("")}<button class="btn" onclick='addRow("${s}",${JSON.stringify(cols)})'>Add</button></div>`;
+const V={
+async dashboard(){const [a,t]=await Promise.all([list("Appointments"),list("Testimonials")]);const today=new Date().toISOString().slice(0,10);
+$("view").innerHTML=`<div class="stats"><div class="stat"><b>${a.length}</b>Appointments</div><div class="stat"><b>${a.filter(x=>x.status==="new").length}</b>New requests</div><div class="stat"><b>${a.filter(x=>x.date===today).length}</b>Today</div><div class="stat"><b>${new Set(a.map(x=>x.phone)).size}</b>Patients</div><div class="stat"><b>${t.filter(x=>x.status==="pending").length}</b>Reviews to approve</div></div>`},
+async appointments(){const a=(await list("Appointments")).reverse();
+$("view").innerHTML=table(["name","phone","service","date","time","notes","status"],a,r=>`<select onchange="setSt(${r._row},this.value)">${["new","confirmed","done","cancelled"].map(s=>`<option ${s===r.status?"selected":""}>${s}</option>`).join("")}</select> ${del("Appointments",r)}`)},
+async patients(){const a=await list("Appointments"),m={};a.forEach(x=>{const p=m[x.phone]||(m[x.phone]={name:x.name,phone:x.phone,email:x.email,visits:0,last:""});p.visits++;p.last=x.date});
+$("view").innerHTML=table(["name","phone","email","visits","last"],Object.values(m),r=>`<a class="btn o" style="text-decoration:none" href="https://wa.me/${String(r.phone).replace(/\D/g,"")}" target="_blank">WhatsApp</a>`)},
+async services(){const s=await list("Services");$("view").innerHTML="<p style='margin-bottom:12px'>icon: shield, spark, implant, smile, pulse, box, drops or plus.</p>"+form("Services",["name","description","icon"])+table(["icon","name","description"],s,r=>del("Services",r))},
+async results(){const s=await list("Results");$("view").innerHTML="<p style='margin-bottom:12px'>Paste direct image links (Drive/ImgBB/GitHub raw) for before and after.</p>"+form("Results",["title","meta","before","after"])+table(["title","meta","before","after"],s,r=>del("Results",r))},
+async testimonials(){const s=(await list("Testimonials")).reverse();$("view").innerHTML=table(["name","rating","text","status"],s,r=>`${r.status!=="approved"?`<button class="btn" onclick="appr(${r._row})">Approve</button> `:""}${del("Testimonials",r)}`)},
+async about(){const s=await list("Settings"),K=["clinic","tagline","badge","wilaya","phone","whatsapp","email","hours","address","lat","lng"];
+$("view").innerHTML=`<div class="box" style="display:grid;gap:12px">${K.map(k=>`<label>${k}<input id="s_${k}" value="${esc(s[k])}"></label>`).join("")}<button class="btn" onclick="saveS()">Save changes</button><small>wilaya: code 1-58 (22 = Sidi Bel Abbès), highlighted on the map. whatsapp: international number without +, e.g. 213555000000. lat/lng: used for directions.</small></div>`}};
+async function setSt(row,v){await api({action:"update",sheet:"Appointments",_row:row,row:{status:v}})}
+async function appr(row){await api({action:"update",sheet:"Testimonials",_row:row,row:{status:"approved"}});show("testimonials")}
+async function saveS(){const row={};document.querySelectorAll("[id^=s_]").forEach(i=>row[i.id.slice(2)]=i.value);await api({action:"saveSettings",row});alert("Saved")}
+</script></body></html>
